@@ -1,13 +1,13 @@
-use macroquad::prelude::*;
+use macroquad::{prelude::*, rand::gen_range};
 
 const GRID_W: usize = 500;
 const GRID_H: usize = 260;
-
 const CELL_SIZE: f32 = 4.0;
-#[derive(Copy, Clone, PartialEq)]
+
+#[derive(Copy, Clone)]
 struct Tile {
     id: i32,
-    tick: i32,
+    color: Color, // 0 = empty, 1 = powder
 }
 
 fn idx(x: usize, y: usize) -> usize {
@@ -16,25 +16,56 @@ fn idx(x: usize, y: usize) -> usize {
 
 #[macroquad::main("Powder simulation")]
 async fn main() {
-    let mut grid = vec![Tile { id: 0, tick: 0 }; GRID_W * GRID_H];
+    let brush_size = 1;
+    let mut grid = vec![
+        Tile {
+            id: 0,
+            color: color_u8!(0, 0, 0, 0),
+        };
+        GRID_W * GRID_H
+    ];
+
     loop {
         clear_background(BLACK);
-        let size = 2;
 
+        // --- LEFT MOUSE = ADD POWDER ---
         if is_mouse_button_down(MouseButton::Left) {
             let (mx, my) = mouse_position();
+            let x = (mx / CELL_SIZE) as i32;
+            let y = (my / CELL_SIZE) as i32;
 
-            let x = (mx / CELL_SIZE) as usize;
-            let y = (my / CELL_SIZE) as usize;
-            for rx in 0..size {
-                for ry in 0..size {
-                    grid[idx(x + rx, y + ry)].id = 1;
+            for rx in 0..brush_size {
+                for ry in 0..brush_size {
+                    let px = x + rx;
+                    let py = y + ry;
+                    if px >= 0 && py >= 0 && px < GRID_W as i32 && py < GRID_H as i32 {
+                        let i = idx(px as usize, py as usize);
+                        grid[i].id = 1;
+                        grid[i].color =
+                            color_u8!(253, gen_range(210, 255), gen_range(92, 190), 255);
+                    }
                 }
             }
-            if x < GRID_W && y < GRID_H {
-                grid[idx(x, y)].id = 1;
+        }
+
+        // --- RIGHT MOUSE = REMOVE POWDER ---
+        if is_mouse_button_down(MouseButton::Right) {
+            let (mx, my) = mouse_position();
+            let x = (mx / CELL_SIZE) as i32;
+            let y = (my / CELL_SIZE) as i32;
+
+            for rx in 0..brush_size {
+                for ry in 0..brush_size {
+                    let px = x + rx;
+                    let py = y + ry;
+                    if px >= 0 && py >= 0 && px < GRID_W as i32 && py < GRID_H as i32 {
+                        grid[idx(px as usize, py as usize)].id = 0;
+                    }
+                }
             }
         }
+
+        // --- SIMULATION ---
         for y in (0..GRID_H - 1).rev() {
             for x in 0..GRID_W {
                 let i = idx(x, y);
@@ -44,26 +75,32 @@ async fn main() {
                     if grid[below].id == 0 {
                         grid.swap(i, below);
                     } else {
-                        if x > 0 && grid[idx(x - 1, y + 1)].id == 0 {
-                            grid.swap(i, idx(x - 1, y + 1));
-                        } else if x > 0 && x + 1 < GRID_W && grid[idx(x + 1, y - 1)].id == 0 {
-                            grid.swap(i, idx(x + 1, y + 1));
+                        let dir = if rand::gen_range(0, 2) == 0 { -1 } else { 1 };
+                        let nx = x as i32 + dir;
+
+                        if nx >= 0 && nx < GRID_W as i32 {
+                            let diag = idx(nx as usize, y + 1);
+                            if grid[diag].id == 0 {
+                                grid.swap(i, diag);
+                            }
                         }
                     }
                 }
             }
         }
 
+        // --- RENDER ---
         for y in 0..GRID_H {
             for x in 0..GRID_W {
-                if grid[idx(x, y)].id == 1 {
-                    draw_rectangle(
+                match grid[idx(x, y)].id {
+                    1 => draw_rectangle(
                         x as f32 * CELL_SIZE,
                         y as f32 * CELL_SIZE,
                         CELL_SIZE,
                         CELL_SIZE,
-                        YELLOW,
-                    );
+                        grid[idx(x, y)].color,
+                    ),
+                    _ => {}
                 }
             }
         }
